@@ -267,8 +267,17 @@ function pairKey(playerA, playerB) {
 function normalizePairHistory(history) {
   return Object.fromEntries(
     Object.entries(history || {})
-      .map(([key, value]) => [key, Math.max(0, Number(value) || 0)])
-      .filter(([, value]) => value > 0)
+      .map(([key, value]) => {
+        if (typeof value === "number") {
+          return [key, { streak: Math.max(0, value), cooldown: value >= 2 ? 3 : 0 }];
+        }
+
+        return [key, {
+          streak: Math.max(0, Number(value?.streak) || 0),
+          cooldown: Math.max(0, Number(value?.cooldown) || 0)
+        }];
+      })
+      .filter(([, value]) => value.streak > 0 || value.cooldown > 0)
   );
 }
 
@@ -299,19 +308,38 @@ function savePairHistory() {
 }
 
 function teamPairConflictCount(team, person) {
-  return team.players.filter((teammate) => pairHistory[pairKey(person, teammate)] >= 2).length;
+  return team.players.filter((teammate) => {
+    const history = pairHistory[pairKey(person, teammate)];
+    return history?.cooldown > 0 || history?.streak >= 2;
+  }).length;
 }
 
 function recordTeamHistory(teams) {
   const nextHistory = {};
+  const currentPairs = new Set();
 
   teams.forEach((team) => {
     team.players.forEach((playerA, index) => {
       team.players.slice(index + 1).forEach((playerB) => {
         const key = pairKey(playerA, playerB);
-        nextHistory[key] = (pairHistory[key] || 0) + 1;
+        const previous = pairHistory[key] || { streak: 0, cooldown: 0 };
+        const streak = previous.streak + 1;
+        nextHistory[key] = {
+          streak,
+          cooldown: streak >= 2 ? 3 : 0
+        };
+        currentPairs.add(key);
       });
     });
+  });
+
+  Object.entries(pairHistory).forEach(([key, history]) => {
+    if (currentPairs.has(key)) return;
+
+    const cooldown = Math.max(0, Number(history.cooldown) || 0);
+    if (cooldown > 1) {
+      nextHistory[key] = { streak: 0, cooldown: cooldown - 1 };
+    }
   });
 
   pairHistory = nextHistory;
@@ -584,6 +612,51 @@ function teamGenderSummary(team) {
   return `${females} female${females === 1 ? "" : "s"} / ${males} male${males === 1 ? "" : "s"} / ${newPlayers} new`;
 }
 
+function shuffle(items) {
+  return items
+    .map((item) => ({ item, order: Math.random() }))
+    .sort((a, b) => a.order - b.order)
+    .map(({ item }) => item);
+}
+
+function balancedDraftOrder(players) {
+  const groups = {
+    female: [],
+    male: [],
+    new: [],
+    unset: []
+  };
+
+  players.forEach((person) => {
+    const groupKey = person.gender || "unset";
+    groups[groupKey].push(person);
+  });
+
+  Object.values(groups).forEach((group) => {
+    group.sort((a, b) => totalSkill(b) - totalSkill(a));
+  });
+
+  const draftOrder = [];
+  const groupOrder = shuffle(["female", "male", "new", "unset"]);
+  while (groupOrder.some((groupKey) => groups[groupKey].length)) {
+    groupOrder.forEach((groupKey) => {
+      const nextPlayer = groups[groupKey].shift();
+      if (nextPlayer) draftOrder.push(nextPlayer);
+    });
+  }
+
+  return draftOrder;
+}
+
+function mixedGenderScore(team, person) {
+  if (person.gender !== "male" && person.gender !== "female") return 0;
+
+  const males = genderCount(team, "male") + (person.gender === "male" ? 1 : 0);
+  const females = genderCount(team, "female") + (person.gender === "female" ? 1 : 0);
+  const missingMixPenalty = males > 0 && females > 0 ? 0 : 1;
+  return Math.abs(males - females) + missingMixPenalty;
+}
+
 function buildSkillsForm() {
   skillsForm.innerHTML = skills.map((skill) => `
     <label class="skill-row">
@@ -759,27 +832,27 @@ function makeTeams() {
     .filter((person) => person.attendance !== "away")
     .slice();
   const maxTeamSize = Math.ceil(playingRoster.length / teamCount);
-  const groups = ["female", "male", "new", ""]
-    .map((gender) => playingRoster
-      .filter((person) => (person.gender || "") === gender)
-      .sort((a, b) => totalSkill(b) - totalSkill(a)))
-    .filter((group) => group.length);
 
-  groups.forEach((group) => {
-    group.forEach((person) => {
-      const openTeams = teams.filter((team) => team.players.length < maxTeamSize);
-      const rankedTeams = (openTeams.length ? openTeams : teams).slice().sort((a, b) => {
-        const sizeBalance = a.players.length - b.players.length;
-        if (sizeBalance !== 0) return sizeBalance;
-        const pairConflicts = teamPairConflictCount(a, person) - teamPairConflictCount(b, person);
-        if (pairConflicts !== 0) return pairConflicts;
-        const genderBalance = genderCount(a, person.gender) - genderCount(b, person.gender);
-        if (genderBalance !== 0) return genderBalance;
-        return a.score - b.score || a.players.length - b.players.length;
-      });
-      rankedTeams[0].players.push(person);
-      rankedTeams[0].score += totalSkill(person);
+  balancedDraftOrder(playingRoster).forEach((person) => {
+    const openTeams = teams.filter((team) => team.players.length < maxTeamSize);
+    const availableTeams = openTeams.length ? openTeams : teams;
+    const shortestSize = Math.min(...availableTeams.map((team) => team.players.length));
+    let candidateTeams = availableTeams.filter((team) => team.players.length === shortestSize);
+    const noConflictTeams = candidateTeams.filter((team) => teamPairConflictCount(team, person) === 0);
+    if (noConflictTeams.length) candidateTeams = noConflictTeams;
+
+    const rankedTeams = candidateTeams.slice().sort((a, b) => {
+      const mixedBalance = mixedGenderScore(a, person) - mixedGenderScore(b, person);
+      if (mixedBalance !== 0) return mixedBalance;
+      const genderBalance = genderCount(a, person.gender) - genderCount(b, person.gender);
+      if (genderBalance !== 0) return genderBalance;
+      const pairConflicts = teamPairConflictCount(a, person) - teamPairConflictCount(b, person);
+      if (pairConflicts !== 0) return pairConflicts;
+      return a.score - b.score || Math.random() - 0.5;
     });
+
+    rankedTeams[0].players.push(person);
+    rankedTeams[0].score += totalSkill(person);
   });
 
   generatedTeams = teams;

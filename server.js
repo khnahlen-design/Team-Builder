@@ -101,8 +101,17 @@ function normalizeTopics(topics) {
 function normalizeTeamHistory(history) {
   return Object.fromEntries(
     Object.entries(history || {})
-      .map(([key, value]) => [String(key), Math.max(0, Number(value) || 0)])
-      .filter(([key, value]) => key.includes("::") && value > 0)
+      .map(([key, value]) => {
+        if (typeof value === "number") {
+          return [String(key), { streak: Math.max(0, value), cooldown: value >= 2 ? 3 : 0 }];
+        }
+
+        return [String(key), {
+          streak: Math.max(0, Number(value?.streak) || 0),
+          cooldown: Math.max(0, Number(value?.cooldown) || 0)
+        }];
+      })
+      .filter(([key, value]) => key.includes("::") && (value.streak > 0 || value.cooldown > 0))
   );
 }
 
