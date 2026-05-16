@@ -1,0 +1,26 @@
+{
+  "name": "CourtCrew",
+  "short_name": "CourtCrew",
+  "description": "Rate youth volleyball players and build balanced teams.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8faf7",
+  "theme_color": "#153f3d",
+  "categories": ["sports", "productivity"],
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/apple-touch-icon.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "players": [],
+  "ratingTopics": [
+    {
+      "key": "serving",
+      "label": "Serving"
+    },
+    {
+      "key": "passing",
+      "label": "Passing"
+    },
+    {
+      "key": "setting",
+      "label": "Setting"
+    },
+    {
+      "key": "hitting",
+      "label": "Hitting"
+    },
+    {
+      "key": "defense",
+      "label": "Defense"
+    },
+    {
+      "key": "gameSense",
+      "label": "Game IQ"
+    }
+  ],
+  "sentInvites": []
+}

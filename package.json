@@ -1,0 +1,12 @@
+{
+  "name": "courtcrew",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CourtCrew youth volleyball RSVP and team balancing app.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
