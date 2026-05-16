@@ -592,6 +592,15 @@ function averageSkill(person) {
   return totalSkill(person) / skills.length;
 }
 
+function playersByRating(players) {
+  const genderOrder = { male: 0, female: 1, new: 2 };
+  return players.slice().sort((a, b) => {
+    const genderRank = (genderOrder[a.gender] ?? 3) - (genderOrder[b.gender] ?? 3);
+    if (genderRank !== 0) return genderRank;
+    return averageSkill(b) - averageSkill(a) || a.name.localeCompare(b.name);
+  });
+}
+
 function genderLabel(gender) {
   if (gender === "female") return "Female";
   if (gender === "male") return "Male";
@@ -883,7 +892,7 @@ function renderTeams() {
         ${isAdmin ? `<span>${average.toFixed(1)} avg</span>` : ""}
       </div>
       <ul>
-        ${team.players.map((person) => `
+        ${playersByRating(team.players).map((person) => `
           <li>
             <span>${person.name}<small>${person.gender ? genderLabel(person.gender) : ""}</small></span>
             ${isAdmin ? `<strong>${averageSkill(person).toFixed(1)}</strong>` : ""}
@@ -914,7 +923,7 @@ function copyText(text) {
 function teamsText() {
   if (!generatedTeams.length) return "No teams generated yet.";
   return generatedTeams.map((team) => {
-    const players = team.players.map((person) => {
+    const players = playersByRating(team.players).map((person) => {
       return isAdmin ? `- ${person.name} (${averageSkill(person).toFixed(1)})` : `- ${person.name}`;
     }).join("\n");
     return `${team.name}\n${players || "- No players"}`;
