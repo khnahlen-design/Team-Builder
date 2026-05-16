@@ -1,8 +1,19 @@
 const STORAGE_KEY = "courtcrew-team-roster-v1";
 const TOPICS_KEY = "courtcrew-rating-topics-v1";
 const TEAM_HISTORY_KEY = "courtcrew-team-pair-history-v1";
-const API_BASE = location.protocol === "file:" ? "http://127.0.0.1:4175" : "";
+const ACTIVE_SPORT_KEY = "courtcrew-active-sport-v1";
+const SPORTS_KEY = "courtcrew-sports-v1";
+const API_BASE = location.protocol === "file:" ? "http://127.0.0.1:4176" : "";
 const API_ENABLED = true;
+const defaultSports = [
+  { key: "volleyball", label: "Volleyball" },
+  { key: "basketball", label: "Basketball" },
+  { key: "soccer", label: "Soccer" },
+  { key: "hockey", label: "Hockey" }
+];
+let sports = loadSports();
+let activeSport = localStorage.getItem(ACTIVE_SPORT_KEY) || "volleyball";
+if (!sports.some((sport) => sport.key === activeSport)) activeSport = "volleyball";
 
 const defaultRatingTopics = [
   { key: "serving", label: "Serving" },
@@ -40,6 +51,10 @@ const saveStatus = document.querySelector("#saveStatus");
 const topicForm = document.querySelector("#topicForm");
 const topicName = document.querySelector("#topicName");
 const ratingTopicList = document.querySelector("#ratingTopicList");
+const sportTabs = document.querySelector("#sportTabs");
+const sportForm = document.querySelector("#sportForm");
+const sportName = document.querySelector("#sportName");
+const sportList = document.querySelector("#sportList");
 
 function player(name, ratings, notes = "", gender = "") {
   return {
@@ -83,7 +98,166 @@ function normalizePlayer(person) {
 }
 
 function apiUrl(path) {
-  return `${API_BASE}${path}`;
+  return `${API_BASE}${path}?sport=${encodeURIComponent(activeSport)}`;
+}
+
+function normalizeSports(items) {
+  const cleaned = [];
+  const used = new Set();
+
+  (items || []).forEach((sport) => {
+    const label = String(sport.label || "").trim();
+    const key = makeSportKey(sport.key || label, "", used);
+    if (!label || used.has(key)) return;
+    used.add(key);
+    cleaned.push({ key, label });
+  });
+
+  return cleaned.length ? cleaned : defaultSports;
+}
+
+function loadSports() {
+  try {
+    const saved = localStorage.getItem(SPORTS_KEY);
+    return saved ? normalizeSports(JSON.parse(saved)) : defaultSports;
+  } catch {
+    return defaultSports;
+  }
+}
+
+function saveSportsLocal() {
+  localStorage.setItem(SPORTS_KEY, JSON.stringify(sports));
+}
+
+function saveSports() {
+  saveSportsLocal();
+  renderSportTabs();
+  renderSportEditor();
+  if (!API_ENABLED) return;
+
+  return fetch(apiUrl("/api/sports"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sportsList: sports })
+  }).catch(() => {
+    console.warn("Sports saved on this device. Server sync failed.");
+  });
+}
+
+function sportStorageKey(key) {
+  return activeSport === "volleyball" ? key : `${key}-${activeSport}`;
+}
+
+function activeSportLabel() {
+  return sports.find((sport) => sport.key === activeSport)?.label || "Sport";
+}
+
+function defaultRosterForSport() {
+  return activeSport === "volleyball" ? demoPlayers : [];
+}
+
+function updateSportTabs() {
+  sportTabs.querySelectorAll(".sport-tab").forEach((button) => {
+    const isActive = button.dataset.sport === activeSport;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function renderSportTabs() {
+  sportTabs.innerHTML = "";
+  sports.forEach((sport) => {
+    const button = document.createElement("button");
+    button.className = "sport-tab";
+    button.type = "button";
+    button.dataset.sport = sport.key;
+    button.textContent = sport.label;
+    sportTabs.appendChild(button);
+  });
+  updateSportTabs();
+}
+
+function renderSportEditor() {
+  sportList.innerHTML = "";
+
+  sports.forEach((sport) => {
+    const row = document.createElement("div");
+    row.className = "topic-row";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = sport.label;
+    input.setAttribute("aria-label", "Sport tab name");
+
+    const saveButton = document.createElement("button");
+    saveButton.className = "ghost-button";
+    saveButton.type = "button";
+    saveButton.textContent = "Save";
+    saveButton.addEventListener("click", () => renameSport(sport.key, input.value));
+
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "danger-button";
+    deleteButton.type = "button";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", () => deleteSport(sport.key));
+
+    row.append(input, saveButton, deleteButton);
+    sportList.appendChild(row);
+  });
+}
+
+function makeSportKey(label, existingKey = "", extraUsed = null) {
+  const base = String(label || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "sport";
+  let key = base;
+  let count = 2;
+  const used = extraUsed || new Set(sports.map((sport) => sport.key).filter((keyValue) => keyValue !== existingKey));
+  while (used.has(key) && key !== existingKey) {
+    key = `${base}-${count}`;
+    count += 1;
+  }
+  return key;
+}
+
+async function addSport(label) {
+  const cleanLabel = label.trim();
+  if (!cleanLabel) return;
+
+  const key = makeSportKey(cleanLabel);
+  sports.push({ key, label: cleanLabel });
+  sportName.value = "";
+  await saveSports();
+  await switchSport(key);
+}
+
+async function renameSport(key, label) {
+  const cleanLabel = label.trim();
+  if (!cleanLabel) return;
+
+  sports = sports.map((sport) => sport.key === key ? { ...sport, label: cleanLabel } : sport);
+  await saveSports();
+  updateSportTabs();
+  if (key === activeSport) saveStatus.textContent = `${cleanLabel} saved.`;
+}
+
+async function deleteSport(key) {
+  if (sports.length <= 1) {
+    saveStatus.textContent = "Keep at least one sport tab.";
+    return;
+  }
+
+  const deleted = sports.find((sport) => sport.key === key);
+  sports = sports.filter((sport) => sport.key !== key);
+  await saveSports();
+
+  if (key === activeSport) {
+    await switchSport(sports[0].key);
+  } else {
+    updateSportTabs();
+    saveStatus.textContent = `${deleted?.label || "Sport"} removed from tabs.`;
+  }
 }
 
 function pairKey(playerA, playerB) {
@@ -100,7 +274,7 @@ function normalizePairHistory(history) {
 
 function loadPairHistory() {
   try {
-    const saved = localStorage.getItem(TEAM_HISTORY_KEY);
+    const saved = localStorage.getItem(sportStorageKey(TEAM_HISTORY_KEY));
     return saved ? normalizePairHistory(JSON.parse(saved)) : {};
   } catch {
     return {};
@@ -108,7 +282,7 @@ function loadPairHistory() {
 }
 
 function savePairHistoryLocal() {
-  localStorage.setItem(TEAM_HISTORY_KEY, JSON.stringify(pairHistory));
+  localStorage.setItem(sportStorageKey(TEAM_HISTORY_KEY), JSON.stringify(pairHistory));
 }
 
 function savePairHistory() {
@@ -146,7 +320,7 @@ function recordTeamHistory(teams) {
 
 function loadRatingTopics() {
   try {
-    const saved = localStorage.getItem(TOPICS_KEY);
+    const saved = localStorage.getItem(sportStorageKey(TOPICS_KEY));
     return saved ? JSON.parse(saved) : defaultRatingTopics;
   } catch {
     return defaultRatingTopics;
@@ -154,7 +328,7 @@ function loadRatingTopics() {
 }
 
 function saveRatingTopics() {
-  localStorage.setItem(TOPICS_KEY, JSON.stringify(skills));
+  localStorage.setItem(sportStorageKey(TOPICS_KEY), JSON.stringify(skills));
   if (!API_ENABLED) return;
 
   return fetch(apiUrl("/api/topics"), {
@@ -168,17 +342,17 @@ function saveRatingTopics() {
 
 function loadRoster() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(sportStorageKey(STORAGE_KEY));
     hasSavedRoster = Boolean(saved);
-    return saved ? JSON.parse(saved).map(normalizePlayer) : demoPlayers;
+    return saved ? JSON.parse(saved).map(normalizePlayer) : defaultRosterForSport();
   } catch {
     hasSavedRoster = false;
-    return demoPlayers;
+    return defaultRosterForSport();
   }
 }
 
 function saveRoster() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(roster));
+  localStorage.setItem(sportStorageKey(STORAGE_KEY), JSON.stringify(roster));
   if (!API_ENABLED) return;
 
   return fetch(apiUrl("/api/players"), {
@@ -197,9 +371,19 @@ async function loadSharedState() {
     const response = await fetch(apiUrl("/api/state"));
     if (!response.ok) throw new Error("Unable to load shared state");
     const state = await response.json();
+    if (state.sportsList?.length) {
+      sports = normalizeSports(state.sportsList);
+      if (!sports.some((sport) => sport.key === activeSport)) {
+        activeSport = sports[0].key;
+        localStorage.setItem(ACTIVE_SPORT_KEY, activeSport);
+      }
+      saveSportsLocal();
+      renderSportTabs();
+      renderSportEditor();
+    }
     if (state.ratingTopics?.length) {
       skills = state.ratingTopics;
-      localStorage.setItem(TOPICS_KEY, JSON.stringify(skills));
+      localStorage.setItem(sportStorageKey(TOPICS_KEY), JSON.stringify(skills));
       buildSkillsForm();
       renderRatingTopics();
     }
@@ -216,7 +400,7 @@ async function loadSharedState() {
 }
 
 function saveLocalOnly() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(roster));
+  localStorage.setItem(sportStorageKey(STORAGE_KEY), JSON.stringify(roster));
 }
 
 function rosterMergeKey(person) {
@@ -252,6 +436,26 @@ function mergeRosters(sharedPlayers, savedPlayers) {
   });
 
   return Array.from(merged.values());
+}
+
+async function switchSport(sportKey) {
+  if (sportKey === activeSport || !sports.some((sport) => sport.key === sportKey)) return;
+
+  activeSport = sportKey;
+  localStorage.setItem(ACTIVE_SPORT_KEY, activeSport);
+  skills = loadRatingTopics();
+  hasSavedRoster = false;
+  roster = loadRoster();
+  pairHistory = loadPairHistory();
+  generatedTeams = [];
+  buildSkillsForm();
+  resetForm();
+  renderRatingTopics();
+  renderRoster();
+  renderTeams();
+  updateSportTabs();
+  saveStatus.textContent = `${activeSportLabel()} loaded.`;
+  await loadSharedState();
 }
 
 function makeTopicKey(label, existingKey = "") {
@@ -539,7 +743,7 @@ function setAttendance(id, attendance) {
 }
 
 function makeTeams() {
-  const teamCount = Math.max(2, Math.min(8, Number(document.querySelector("#teamCount").value) || 2));
+  const teamCount = Math.max(2, Math.min(10, Number(document.querySelector("#teamCount").value) || 2));
   const names = document.querySelector("#teamNames").value
     .split(",")
     .map((name) => name.trim())
@@ -646,6 +850,8 @@ function teamsText() {
 
 buildSkillsForm();
 renderRatingTopics();
+renderSportTabs();
+renderSportEditor();
 setBuilderMode();
 loadSharedState();
 
@@ -678,6 +884,17 @@ document.querySelector("#clearForm").addEventListener("click", resetForm);
 
 document.querySelector("#copyTeams").addEventListener("click", async () => {
   await copyText(teamsText());
+});
+
+sportForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  addSport(sportName.value);
+});
+
+sportTabs.addEventListener("click", (event) => {
+  const button = event.target.closest(".sport-tab");
+  if (!button) return;
+  switchSport(button.dataset.sport);
 });
 
 document.querySelectorAll(".tab-button").forEach((button) => {

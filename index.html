@@ -13,7 +13,7 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.svg">
-    <link rel="stylesheet" href="styles.css?v=28">
+    <link rel="stylesheet" href="styles.css?v=31">
   </head>
   <body>
     <main class="app-shell">
@@ -62,6 +62,25 @@
             <div class="topic-list" id="ratingTopicList"></div>
           </div>
         </details>
+
+        <details class="admin-panel rating-topics-dropdown">
+          <summary>
+            <span>
+              <span class="eyebrow">Sports</span>
+              <strong id="sports-heading">Sports tabs</strong>
+            </span>
+          </summary>
+          <div class="topic-dropdown-content">
+            <form class="topic-form" id="sportForm">
+              <label for="sportName">New sport</label>
+              <div class="password-row">
+                <input id="sportName" type="text" placeholder="Baseball, dodgeball...">
+                <button class="primary-button" type="submit">Add</button>
+              </div>
+            </form>
+            <div class="topic-list" id="sportList"></div>
+          </div>
+        </details>
       </aside>
 
       <section class="workbench">
@@ -85,6 +104,8 @@
             </div>
           </div>
         </header>
+
+        <nav class="sport-tabs" id="sportTabs" aria-label="Sports"></nav>
 
         <nav class="tabs" aria-label="App sections">
           <button class="tab-button active" type="button" data-tab="players">Roster</button>
@@ -152,7 +173,7 @@
               </div>
               <label>
                 Number of teams
-                <input id="teamCount" type="number" min="2" max="8" value="4">
+                <input id="teamCount" type="number" min="2" max="10" value="4">
               </label>
               <label>
                 Team names
@@ -200,7 +221,7 @@
       </article>
     </template>
 
-    <script src="app.js?v=28"></script>
+    <script src="app.js?v=31"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {

@@ -27,5 +27,145 @@
     }
   ],
   "teamHistory": {},
-  "sentInvites": []
+  "sentInvites": [],
+  "sportsList": [
+    {
+      "key": "volleyball",
+      "label": "Volleyball"
+    },
+    {
+      "key": "basketball",
+      "label": "Basketball"
+    },
+    {
+      "key": "soccer",
+      "label": "Soccer"
+    },
+    {
+      "key": "hockey",
+      "label": "Hockey"
+    }
+  ],
+  "sports": {
+    "volleyball": {
+      "players": [],
+      "ratingTopics": [
+        {
+          "key": "serving",
+          "label": "Serving"
+        },
+        {
+          "key": "passing",
+          "label": "Passing"
+        },
+        {
+          "key": "setting",
+          "label": "Setting"
+        },
+        {
+          "key": "hitting",
+          "label": "Hitting"
+        },
+        {
+          "key": "defense",
+          "label": "Defense"
+        },
+        {
+          "key": "gameSense",
+          "label": "Game IQ"
+        }
+      ],
+      "teamHistory": {}
+    },
+    "basketball": {
+      "players": [],
+      "ratingTopics": [
+        {
+          "key": "serving",
+          "label": "Serving"
+        },
+        {
+          "key": "passing",
+          "label": "Passing"
+        },
+        {
+          "key": "setting",
+          "label": "Setting"
+        },
+        {
+          "key": "hitting",
+          "label": "Hitting"
+        },
+        {
+          "key": "defense",
+          "label": "Defense"
+        },
+        {
+          "key": "gameSense",
+          "label": "Game IQ"
+        }
+      ],
+      "teamHistory": {}
+    },
+    "soccer": {
+      "players": [],
+      "ratingTopics": [
+        {
+          "key": "serving",
+          "label": "Serving"
+        },
+        {
+          "key": "passing",
+          "label": "Passing"
+        },
+        {
+          "key": "setting",
+          "label": "Setting"
+        },
+        {
+          "key": "hitting",
+          "label": "Hitting"
+        },
+        {
+          "key": "defense",
+          "label": "Defense"
+        },
+        {
+          "key": "gameSense",
+          "label": "Game IQ"
+        }
+      ],
+      "teamHistory": {}
+    },
+    "hockey": {
+      "players": [],
+      "ratingTopics": [
+        {
+          "key": "serving",
+          "label": "Serving"
+        },
+        {
+          "key": "passing",
+          "label": "Passing"
+        },
+        {
+          "key": "setting",
+          "label": "Setting"
+        },
+        {
+          "key": "hitting",
+          "label": "Hitting"
+        },
+        {
+          "key": "defense",
+          "label": "Defense"
+        },
+        {
+          "key": "gameSense",
+          "label": "Game IQ"
+        }
+      ],
+      "teamHistory": {}
+    }
+  }
 }
