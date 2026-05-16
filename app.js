@@ -53,6 +53,7 @@ function player(name, ratings, notes = "", gender = "") {
 function normalizeGender(gender) {
   if (gender === "male" || gender === "boy") return "male";
   if (gender === "female" || gender === "girl") return "female";
+  if (gender === "new") return "new";
   return "";
 }
 
@@ -300,6 +301,7 @@ function averageSkill(person) {
 function genderLabel(gender) {
   if (gender === "female") return "Female";
   if (gender === "male") return "Male";
+  if (gender === "new") return "New";
   return "Not set";
 }
 
@@ -311,8 +313,9 @@ function genderCount(team, gender) {
 function teamGenderSummary(team) {
   const females = genderCount(team, "female");
   const males = genderCount(team, "male");
-  if (!females && !males) return "";
-  return `${females} female${females === 1 ? "" : "s"} / ${males} male${males === 1 ? "" : "s"}`;
+  const newPlayers = genderCount(team, "new");
+  if (!females && !males && !newPlayers) return "";
+  return `${females} female${females === 1 ? "" : "s"} / ${males} male${males === 1 ? "" : "s"} / ${newPlayers} new`;
 }
 
 function buildSkillsForm() {
@@ -486,21 +489,26 @@ function makeTeams() {
     score: 0
   }));
 
-  roster
+  const playingRoster = roster
     .filter((person) => person.attendance !== "away")
-    .slice()
-    .sort((a, b) => totalSkill(b) - totalSkill(a))
-    .forEach((person) => {
-      teams.sort((a, b) => {
-        if (person.gender) {
-          const genderBalance = genderCount(a, person.gender) - genderCount(b, person.gender);
-          if (genderBalance !== 0) return genderBalance;
-        }
+    .slice();
+  const groups = ["female", "male", "new", ""]
+    .map((gender) => playingRoster
+      .filter((person) => (person.gender || "") === gender)
+      .sort((a, b) => totalSkill(b) - totalSkill(a)))
+    .filter((group) => group.length);
+
+  groups.forEach((group) => {
+    group.forEach((person) => {
+      const rankedTeams = teams.slice().sort((a, b) => {
+        const genderBalance = genderCount(a, person.gender) - genderCount(b, person.gender);
+        if (genderBalance !== 0) return genderBalance;
         return a.score - b.score || a.players.length - b.players.length;
       });
-      teams[0].players.push(person);
-      teams[0].score += totalSkill(person);
+      rankedTeams[0].players.push(person);
+      rankedTeams[0].score += totalSkill(person);
     });
+  });
 
   generatedTeams = teams;
   renderTeams();

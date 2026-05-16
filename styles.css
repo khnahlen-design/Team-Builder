@@ -246,6 +246,57 @@ h4 {
   background: #fffaf0;
 }
 
+.rating-topics-dropdown {
+  display: block;
+  overflow: hidden;
+  padding: 0;
+}
+
+.rating-topics-dropdown summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.rating-topics-dropdown summary::-webkit-details-marker {
+  display: none;
+}
+
+.rating-topics-dropdown summary strong {
+  display: block;
+  font-size: 1.15rem;
+  line-height: 1.05;
+}
+
+.rating-topics-dropdown summary::after {
+  content: "Open";
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--teal);
+  background: #fff;
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.rating-topics-dropdown[open] summary::after {
+  content: "Close";
+}
+
+.topic-dropdown-content {
+  display: grid;
+  gap: 10px;
+  padding: 0 18px 18px;
+}
+
+.rating-topics-dropdown:not([open]) .topic-dropdown-content {
+  display: none;
+}
+
 .admin-login {
   display: grid;
   gap: 8px;
@@ -711,6 +762,11 @@ a:focus-visible {
 .gender-male-pill {
   color: #204f82;
   background: rgba(79, 124, 172, 0.18);
+}
+
+.gender-new-pill {
+  color: #685100;
+  background: rgba(246, 200, 95, 0.24);
 }
 
 .gender-unset-pill {
