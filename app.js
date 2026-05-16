@@ -1,5 +1,6 @@
 const STORAGE_KEY = "courtcrew-team-roster-v1";
 const TOPICS_KEY = "courtcrew-rating-topics-v1";
+const TEAM_HISTORY_KEY = "courtcrew-team-pair-history-v1";
 const API_BASE = location.protocol === "file:" ? "http://127.0.0.1:4175" : "";
 const API_ENABLED = true;
 
@@ -29,6 +30,7 @@ let hasSavedRoster = false;
 let roster = loadRoster();
 let generatedTeams = [];
 let isAdmin = true;
+let pairHistory = loadPairHistory();
 
 const form = document.querySelector("#playerForm");
 const skillsForm = document.querySelector("#skillsForm");
@@ -82,6 +84,64 @@ function normalizePlayer(person) {
 
 function apiUrl(path) {
   return `${API_BASE}${path}`;
+}
+
+function pairKey(playerA, playerB) {
+  return [playerA.id, playerB.id].sort().join("::");
+}
+
+function normalizePairHistory(history) {
+  return Object.fromEntries(
+    Object.entries(history || {})
+      .map(([key, value]) => [key, Math.max(0, Number(value) || 0)])
+      .filter(([, value]) => value > 0)
+  );
+}
+
+function loadPairHistory() {
+  try {
+    const saved = localStorage.getItem(TEAM_HISTORY_KEY);
+    return saved ? normalizePairHistory(JSON.parse(saved)) : {};
+  } catch {
+    return {};
+  }
+}
+
+function savePairHistoryLocal() {
+  localStorage.setItem(TEAM_HISTORY_KEY, JSON.stringify(pairHistory));
+}
+
+function savePairHistory() {
+  savePairHistoryLocal();
+  if (!API_ENABLED) return;
+
+  return fetch(apiUrl("/api/team-history"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teamHistory: pairHistory })
+  }).catch(() => {
+    console.warn("Team history saved on this device. Server sync failed.");
+  });
+}
+
+function teamPairConflictCount(team, person) {
+  return team.players.filter((teammate) => pairHistory[pairKey(person, teammate)] >= 2).length;
+}
+
+function recordTeamHistory(teams) {
+  const nextHistory = {};
+
+  teams.forEach((team) => {
+    team.players.forEach((playerA, index) => {
+      team.players.slice(index + 1).forEach((playerB) => {
+        const key = pairKey(playerA, playerB);
+        nextHistory[key] = (pairHistory[key] || 0) + 1;
+      });
+    });
+  });
+
+  pairHistory = nextHistory;
+  savePairHistory();
 }
 
 function loadRatingTopics() {
@@ -143,6 +203,8 @@ async function loadSharedState() {
       buildSkillsForm();
       renderRatingTopics();
     }
+    pairHistory = normalizePairHistory(state.teamHistory || pairHistory);
+    savePairHistoryLocal();
     roster = mergeRosters(state.players || [], hasSavedRoster ? roster : []);
     saveLocalOnly();
     saveRoster();
@@ -373,7 +435,7 @@ function renderRoster() {
       card.querySelector("h4").textContent = person.name;
       card.querySelector("p").textContent = isAdmin ? `Skill ${score.toFixed(1)} of 5` : "Player saved";
       const attendancePill = card.querySelector(".attendance-pill");
-      attendancePill.textContent = isPlaying ? "Playing" : "Not there";
+      attendancePill.textContent = isPlaying ? "Playing" : "Not playing";
       attendancePill.classList.add(isPlaying ? "attendance-playing-pill" : "attendance-away-pill");
       const genderPill = card.querySelector(".gender-pill");
       genderPill.textContent = genderLabel(person.gender);
@@ -473,7 +535,7 @@ function setAttendance(id, attendance) {
   saveRoster();
   renderRoster();
   renderTeams();
-  saveStatus.textContent = `Attendance saved: ${attendance === "away" ? "Not there" : "Playing"}.`;
+  saveStatus.textContent = `Attendance saved: ${attendance === "away" ? "Not playing" : "Playing"}.`;
 }
 
 function makeTeams() {
@@ -492,6 +554,7 @@ function makeTeams() {
   const playingRoster = roster
     .filter((person) => person.attendance !== "away")
     .slice();
+  const maxTeamSize = Math.ceil(playingRoster.length / teamCount);
   const groups = ["female", "male", "new", ""]
     .map((gender) => playingRoster
       .filter((person) => (person.gender || "") === gender)
@@ -500,7 +563,12 @@ function makeTeams() {
 
   groups.forEach((group) => {
     group.forEach((person) => {
-      const rankedTeams = teams.slice().sort((a, b) => {
+      const openTeams = teams.filter((team) => team.players.length < maxTeamSize);
+      const rankedTeams = (openTeams.length ? openTeams : teams).slice().sort((a, b) => {
+        const sizeBalance = a.players.length - b.players.length;
+        if (sizeBalance !== 0) return sizeBalance;
+        const pairConflicts = teamPairConflictCount(a, person) - teamPairConflictCount(b, person);
+        if (pairConflicts !== 0) return pairConflicts;
         const genderBalance = genderCount(a, person.gender) - genderCount(b, person.gender);
         if (genderBalance !== 0) return genderBalance;
         return a.score - b.score || a.players.length - b.players.length;
@@ -511,6 +579,7 @@ function makeTeams() {
   });
 
   generatedTeams = teams;
+  recordTeamHistory(generatedTeams);
   renderTeams();
 }
 

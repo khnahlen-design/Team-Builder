@@ -62,6 +62,7 @@ function demoPlayer(name, status, grade, contact, ratings, notes, gender) {
 function defaultDb() {
   return {
     ratingTopics: defaultRatingTopics,
+    teamHistory: {},
     players: [
       demoPlayer("Maya Johnson", "pending", "8", "555-0101", [5, 4, 4, 5, 4, 5], "Strong all-around player.", "female"),
       demoPlayer("Noah Chen", "pending", "7", "555-0102", [3, 4, 2, 3, 4, 3], "Great passer.", "male"),
@@ -79,6 +80,14 @@ function normalizeTopics(topics) {
     .filter((topic) => topic.key && topic.label);
 
   return cleaned.length ? cleaned : defaultRatingTopics;
+}
+
+function normalizeTeamHistory(history) {
+  return Object.fromEntries(
+    Object.entries(history || {})
+      .map(([key, value]) => [String(key), Math.max(0, Number(value) || 0)])
+      .filter(([key, value]) => key.includes("::") && value > 0)
+  );
 }
 
 function readDb() {
@@ -128,7 +137,7 @@ function normalizePlayer(player) {
     id: player.id || newId(),
     name: String(player.name || "").trim(),
     notes: player.notes || "",
-    gender: gender === "male" || gender === "female" ? gender : "",
+    gender: gender === "male" || gender === "female" || gender === "new" ? gender : "",
     attendance: player.attendance === "away" ? "away" : "playing",
     savedAt: player.savedAt || new Date().toISOString(),
     ratings: Object.fromEntries(
@@ -142,6 +151,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && url.pathname === "/api/state") {
     db.ratingTopics = normalizeTopics(db.ratingTopics);
+    db.teamHistory = normalizeTeamHistory(db.teamHistory);
     sendJson(res, 200, db);
     return;
   }
@@ -159,6 +169,14 @@ async function handleApi(req, res, url) {
     db.ratingTopics = normalizeTopics(body.ratingTopics);
     writeDb(db);
     sendJson(res, 200, db.ratingTopics);
+    return;
+  }
+
+  if (req.method === "PUT" && url.pathname === "/api/team-history") {
+    const body = await parseBody(req);
+    db.teamHistory = normalizeTeamHistory(body.teamHistory);
+    writeDb(db);
+    sendJson(res, 200, db.teamHistory);
     return;
   }
 

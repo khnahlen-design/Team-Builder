@@ -13,7 +13,7 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.svg">
-    <link rel="stylesheet" href="styles.css?v=23">
+    <link rel="stylesheet" href="styles.css?v=28">
   </head>
   <body>
     <main class="app-shell">
@@ -159,7 +159,7 @@
                 <input id="teamNames" type="text" value="Red, Blue, Green, Gold">
               </label>
               <button class="primary-button wide" id="generateTeams" type="button">Generate teams</button>
-              <p class="small-note">Teams are balanced by each player’s ratings, team size, and male/female mix.</p>
+              <p class="small-note">Team sizes stay as even as possible, then ratings, gender mix, and teammate history are balanced.</p>
             </section>
 
             <section class="team-results" aria-label="Generated teams">
@@ -193,14 +193,14 @@
         <div class="player-meta"></div>
         <div class="card-actions">
           <button class="ghost-button attendance-playing" type="button">Playing</button>
-          <button class="ghost-button attendance-away" type="button">Not there</button>
+          <button class="ghost-button attendance-away" type="button">Not playing</button>
           <button class="ghost-button edit-player" type="button">Edit</button>
           <button class="danger-button delete-player" type="button">Delete</button>
         </div>
       </article>
     </template>
 
-    <script src="app.js?v=23"></script>
+    <script src="app.js?v=28"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
