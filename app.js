@@ -5,6 +5,7 @@ const TEAM_HISTORY_KEY = "courtcrew-team-pair-history-v1";
 const ACTIVE_SPORT_KEY = "courtcrew-active-sport-v1";
 const SPORTS_KEY = "courtcrew-sports-v1";
 const MAX_PLAYERS = 200;
+const TEAM_AVERAGE_TARGET_RANGE = 0.2;
 const API_BASE = location.protocol === "file:" ? "http://127.0.0.1:4176" : "";
 const API_ENABLED = true;
 const defaultSports = [
@@ -596,6 +597,44 @@ function averageSkill(person) {
   return totalSkill(person) / skills.length;
 }
 
+function averageRosterSkill(players) {
+  return players.length
+    ? players.reduce((sum, person) => sum + averageSkill(person), 0) / players.length
+    : 0;
+}
+
+function teamAverage(team) {
+  return team.players.length ? team.score / team.players.length / skills.length : 0;
+}
+
+function projectedTeamAverage(team, person) {
+  return (team.score + totalSkill(person)) / (team.players.length + 1) / skills.length;
+}
+
+function maxAverageGap(teams, targetAverage) {
+  return teams.reduce((gap, team) => {
+    if (!team.players.length) return gap;
+    return Math.max(gap, Math.abs(teamAverage(team) - targetAverage));
+  }, 0);
+}
+
+function teamSizeSpread(teams) {
+  const sizes = teams.map((team) => team.players.length);
+  return Math.max(...sizes) - Math.min(...sizes);
+}
+
+function genderSpread(teams, gender) {
+  const counts = teams.map((team) => genderCount(team, gender));
+  return Math.max(...counts) - Math.min(...counts);
+}
+
+function teamBalanceScore(teams, targetAverage) {
+  const averagePenalty = maxAverageGap(teams, targetAverage);
+  const sizePenalty = teamSizeSpread(teams);
+  const genderPenalty = genderSpread(teams, "male") + genderSpread(teams, "female");
+  return (averagePenalty * 1000) + (sizePenalty * 100) + (genderPenalty * 10);
+}
+
 function playersByRating(players) {
   const genderOrder = { male: 0, female: 1 };
   return players.slice().sort((a, b) => {
@@ -854,22 +893,13 @@ function setAttendance(id, attendance) {
   saveStatus.textContent = `Attendance saved: ${attendance === "away" ? "Not playing" : "Playing"}.`;
 }
 
-function makeTeams() {
-  const teamCount = Math.max(2, Math.min(10, Number(document.querySelector("#teamCount").value) || 2));
-  const names = document.querySelector("#teamNames").value
-    .split(",")
-    .map((name) => name.trim())
-    .filter(Boolean);
-
+function buildTeamsOnce(playingRoster, teamCount, names, targetAverage) {
   const teams = Array.from({ length: teamCount }, (_, index) => ({
     name: names[index] || `Team ${index + 1}`,
     players: [],
     score: 0
   }));
 
-  const playingRoster = roster
-    .filter((person) => person.attendance !== "away")
-    .slice();
   const maxTeamSize = Math.ceil(playingRoster.length / teamCount);
 
   balancedDraftOrder(playingRoster).forEach((person) => {
@@ -881,6 +911,9 @@ function makeTeams() {
     if (noConflictTeams.length) candidateTeams = noConflictTeams;
 
     const rankedTeams = candidateTeams.slice().sort((a, b) => {
+      const averageGap = Math.abs(projectedTeamAverage(a, person) - targetAverage)
+        - Math.abs(projectedTeamAverage(b, person) - targetAverage);
+      if (averageGap !== 0) return averageGap;
       const mixedBalance = mixedGenderScore(a, person) - mixedGenderScore(b, person);
       if (mixedBalance !== 0) return mixedBalance;
       const genderBalance = genderCount(a, person.gender) - genderCount(b, person.gender);
@@ -894,9 +927,47 @@ function makeTeams() {
     rankedTeams[0].score += totalSkill(person);
   });
 
-  generatedTeams = teams;
+  return teams;
+}
+
+function makeTeams() {
+  const teamCount = Math.max(2, Math.min(10, Number(document.querySelector("#teamCount").value) || 2));
+  const names = document.querySelector("#teamNames").value
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+
+  const playingRoster = roster
+    .filter((person) => person.attendance !== "away")
+    .slice();
+
+  if (!playingRoster.length) {
+    generatedTeams = [];
+    renderTeams();
+    return;
+  }
+
+  const targetAverage = averageRosterSkill(playingRoster);
+  let bestTeams = buildTeamsOnce(playingRoster, teamCount, names, targetAverage);
+  let bestScore = teamBalanceScore(bestTeams, targetAverage);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const teams = buildTeamsOnce(playingRoster, teamCount, names, targetAverage);
+    const score = teamBalanceScore(teams, targetAverage);
+    if (score < bestScore) {
+      bestTeams = teams;
+      bestScore = score;
+    }
+  }
+
+  generatedTeams = bestTeams;
   recordTeamHistory(generatedTeams);
   renderTeams();
+
+  const gap = maxAverageGap(generatedTeams, targetAverage);
+  saveStatus.textContent = gap <= TEAM_AVERAGE_TARGET_RANGE
+    ? `Teams are balanced within +/- ${TEAM_AVERAGE_TARGET_RANGE.toFixed(1)} average.`
+    : `Closest balance made. Biggest average difference is ${gap.toFixed(1)}.`;
 }
 
 function renderTeams() {
