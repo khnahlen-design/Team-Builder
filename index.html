@@ -13,7 +13,7 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.svg">
-    <link rel="stylesheet" href="styles.css?v=37">
+    <link rel="stylesheet" href="styles.css?v=38">
   </head>
   <body>
     <main class="app-shell">
@@ -126,6 +126,7 @@
                 <button class="primary-button" type="submit">Save player</button>
                 <button class="ghost-button" id="clearForm" type="button">Clear</button>
               </div>
+              <p class="small-note" id="rosterLimitStatus">Roster saves up to 200 players.</p>
               <p class="small-note" id="saveStatus" role="status"></p>
             </form>
 
@@ -198,7 +199,7 @@
       </article>
     </template>
 
-    <script src="app.js?v=37"></script>
+    <script src="app.js?v=38"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {

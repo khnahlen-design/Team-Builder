@@ -4,6 +4,7 @@ const TOPICS_KEY = "courtcrew-rating-topics-v1";
 const TEAM_HISTORY_KEY = "courtcrew-team-pair-history-v1";
 const ACTIVE_SPORT_KEY = "courtcrew-active-sport-v1";
 const SPORTS_KEY = "courtcrew-sports-v1";
+const MAX_PLAYERS = 200;
 const API_BASE = location.protocol === "file:" ? "http://127.0.0.1:4176" : "";
 const API_ENABLED = true;
 const defaultSports = [
@@ -48,6 +49,7 @@ const skillsForm = document.querySelector("#skillsForm");
 const playerList = document.querySelector("#playerList");
 const teamsGrid = document.querySelector("#teamsGrid");
 const saveStatus = document.querySelector("#saveStatus");
+const rosterLimitStatus = document.querySelector("#rosterLimitStatus");
 const topicForm = document.querySelector("#topicForm");
 const topicName = document.querySelector("#topicName");
 const ratingTopicList = document.querySelector("#ratingTopicList");
@@ -114,7 +116,7 @@ function loadPlayerRatingsFile() {
     if (!saved) return [];
     const parsed = JSON.parse(saved);
     const players = Array.isArray(parsed) ? parsed : parsed.players;
-    return (players || []).map(normalizePlayer);
+    return (players || []).map(normalizePlayer).slice(0, MAX_PLAYERS);
   } catch {
     return [];
   }
@@ -123,7 +125,7 @@ function loadPlayerRatingsFile() {
 function savePlayerRatingsFile(players = roster) {
   localStorage.setItem(PLAYER_RATINGS_KEY, JSON.stringify({
     updatedAt: new Date().toISOString(),
-    players: players.map(playerRatingRecord)
+    players: players.slice(0, MAX_PLAYERS).map(playerRatingRecord)
   }));
 }
 
@@ -368,17 +370,18 @@ function loadRoster() {
   try {
     const saved = localStorage.getItem(sportStorageKey(STORAGE_KEY));
     hasSavedRoster = Boolean(saved);
-    if (saved) return JSON.parse(saved).map(normalizePlayer);
+    if (saved) return JSON.parse(saved).map(normalizePlayer).slice(0, MAX_PLAYERS);
     const ratingBackup = loadPlayerRatingsFile();
-    return ratingBackup.length ? ratingBackup : defaultRosterForSport();
+    return ratingBackup.length ? ratingBackup : defaultRosterForSport().slice(0, MAX_PLAYERS);
   } catch {
     hasSavedRoster = false;
     const ratingBackup = loadPlayerRatingsFile();
-    return ratingBackup.length ? ratingBackup : defaultRosterForSport();
+    return ratingBackup.length ? ratingBackup : defaultRosterForSport().slice(0, MAX_PLAYERS);
   }
 }
 
 function saveRoster() {
+  roster = roster.slice(0, MAX_PLAYERS);
   localStorage.setItem(sportStorageKey(STORAGE_KEY), JSON.stringify(roster));
   savePlayerRatingsFile();
   if (!API_ENABLED) return;
@@ -386,7 +389,7 @@ function saveRoster() {
   return fetch(apiUrl("/api/players"), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ players: roster })
+    body: JSON.stringify({ players: roster.slice(0, MAX_PLAYERS) })
   }).catch(() => {
     console.warn("Saved on this device. Server sync failed.");
   });
@@ -464,7 +467,7 @@ function mergeRosters(sharedPlayers, savedPlayers) {
     }));
   });
 
-  return Array.from(merged.values());
+  return Array.from(merged.values()).slice(0, MAX_PLAYERS);
 }
 
 async function switchSport(sportKey) {
@@ -712,6 +715,9 @@ function renderStats() {
   document.querySelector("#playerCount").textContent = `${playing.length}/${roster.length}`;
   document.querySelector("#averageSkill").textContent = average.toFixed(1);
   document.querySelector("#teamCountStat").textContent = generatedTeams.length || document.querySelector("#teamCount").value;
+  if (rosterLimitStatus) {
+    rosterLimitStatus.textContent = `Roster saves ${roster.length} of ${MAX_PLAYERS} players.`;
+  }
 }
 
 function setBuilderMode() {
@@ -975,6 +981,11 @@ form.addEventListener("submit", async (event) => {
   if (existingIndex >= 0) {
     roster[existingIndex] = person;
   } else {
+    if (roster.length >= MAX_PLAYERS) {
+      saveStatus.textContent = `Roster is full at ${MAX_PLAYERS} players. Delete a player before adding another.`;
+      renderStats();
+      return;
+    }
     roster.push(person);
   }
 

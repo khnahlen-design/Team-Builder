@@ -9,6 +9,7 @@ const ROOT = __dirname;
 const DB_FILE = path.join(ROOT, "courtcrew-db.json");
 const DB_BACKUP_FILE = path.join(ROOT, "courtcrew-db.backup.json");
 const PLAYER_RATINGS_FILE = path.join(ROOT, "courtcrew-player-ratings.json");
+const MAX_PLAYERS = 200;
 
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -249,7 +250,7 @@ function readPlayerRatingsFile() {
 
   try {
     const parsed = JSON.parse(fs.readFileSync(PLAYER_RATINGS_FILE, "utf8"));
-    return (parsed.players || []).map(normalizePlayer);
+    return (parsed.players || []).map(normalizePlayer).slice(0, MAX_PLAYERS);
   } catch {
     return [];
   }
@@ -264,7 +265,7 @@ function writePlayerRatingsFile(players) {
 
 function mergePlayerRatingsFile(players) {
   const savedRatings = readPlayerRatingsFile();
-  if (!players.length) return savedRatings;
+  if (!players.length) return savedRatings.slice(0, MAX_PLAYERS);
 
   const byId = new Map(savedRatings.map((player) => [player.id, player]));
   const byName = new Map(savedRatings.map((player) => [player.name.trim().toLowerCase(), player]));
@@ -281,7 +282,7 @@ function mergePlayerRatingsFile(players) {
       attendance: saved.attendance || player.attendance,
       savedAt: saved.savedAt || player.savedAt
     });
-  });
+  }).slice(0, MAX_PLAYERS);
 }
 
 async function handleApi(req, res, url) {
@@ -309,7 +310,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "PUT" && url.pathname === "/api/players") {
     const body = await parseBody(req);
-    sportState.players = (body.players || []).map(normalizePlayer);
+    sportState.players = (body.players || []).map(normalizePlayer).slice(0, MAX_PLAYERS);
     writePlayerRatingsFile(sportState.players);
     syncLegacyVolleyball(db);
     writeDb(db);
