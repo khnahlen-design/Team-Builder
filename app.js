@@ -1,4 +1,5 @@
 const STORAGE_KEY = "courtcrew-team-roster-v1";
+const PLAYER_RATINGS_KEY = "courtcrew-player-ratings-file-v1";
 const TOPICS_KEY = "courtcrew-rating-topics-v1";
 const TEAM_HISTORY_KEY = "courtcrew-team-pair-history-v1";
 const ACTIVE_SPORT_KEY = "courtcrew-active-sport-v1";
@@ -6,14 +7,12 @@ const SPORTS_KEY = "courtcrew-sports-v1";
 const API_BASE = location.protocol === "file:" ? "http://127.0.0.1:4176" : "";
 const API_ENABLED = true;
 const defaultSports = [
-  { key: "volleyball", label: "Volleyball" },
-  { key: "basketball", label: "Basketball" },
-  { key: "soccer", label: "Soccer" },
-  { key: "hockey", label: "Hockey" }
+  { key: "volleyball", label: "Volleyball" }
 ];
-let sports = loadSports();
-let activeSport = localStorage.getItem(ACTIVE_SPORT_KEY) || "volleyball";
-if (!sports.some((sport) => sport.key === activeSport)) activeSport = "volleyball";
+let sports = defaultSports;
+let activeSport = "volleyball";
+localStorage.setItem(ACTIVE_SPORT_KEY, activeSport);
+localStorage.setItem(SPORTS_KEY, JSON.stringify(defaultSports));
 
 const defaultRatingTopics = [
   { key: "serving", label: "Serving" },
@@ -42,6 +41,7 @@ let roster = loadRoster();
 let generatedTeams = [];
 let isAdmin = true;
 let pairHistory = loadPairHistory();
+let ratingAutosaveTimer = null;
 
 const form = document.querySelector("#playerForm");
 const skillsForm = document.querySelector("#skillsForm");
@@ -70,7 +70,6 @@ function player(name, ratings, notes = "", gender = "") {
 function normalizeGender(gender) {
   if (gender === "male" || gender === "boy") return "male";
   if (gender === "female" || gender === "girl") return "female";
-  if (gender === "new") return "new";
   return "";
 }
 
@@ -97,36 +96,51 @@ function normalizePlayer(person) {
   };
 }
 
+function playerRatingRecord(person) {
+  return {
+    id: person.id,
+    name: person.name,
+    notes: person.notes || "",
+    gender: person.gender || "",
+    attendance: person.attendance || "playing",
+    savedAt: person.savedAt || new Date().toISOString(),
+    ratings: { ...person.ratings }
+  };
+}
+
+function loadPlayerRatingsFile() {
+  try {
+    const saved = localStorage.getItem(PLAYER_RATINGS_KEY);
+    if (!saved) return [];
+    const parsed = JSON.parse(saved);
+    const players = Array.isArray(parsed) ? parsed : parsed.players;
+    return (players || []).map(normalizePlayer);
+  } catch {
+    return [];
+  }
+}
+
+function savePlayerRatingsFile(players = roster) {
+  localStorage.setItem(PLAYER_RATINGS_KEY, JSON.stringify({
+    updatedAt: new Date().toISOString(),
+    players: players.map(playerRatingRecord)
+  }));
+}
+
 function apiUrl(path) {
   return `${API_BASE}${path}?sport=${encodeURIComponent(activeSport)}`;
 }
 
 function normalizeSports(items) {
-  const cleaned = [];
-  const used = new Set();
-
-  (items || []).forEach((sport) => {
-    const label = String(sport.label || "").trim();
-    const key = makeSportKey(sport.key || label, "", used);
-    if (!label || used.has(key)) return;
-    used.add(key);
-    cleaned.push({ key, label });
-  });
-
-  return cleaned.length ? cleaned : defaultSports;
+  return defaultSports;
 }
 
 function loadSports() {
-  try {
-    const saved = localStorage.getItem(SPORTS_KEY);
-    return saved ? normalizeSports(JSON.parse(saved)) : defaultSports;
-  } catch {
-    return defaultSports;
-  }
+  return defaultSports;
 }
 
 function saveSportsLocal() {
-  localStorage.setItem(SPORTS_KEY, JSON.stringify(sports));
+  localStorage.setItem(SPORTS_KEY, JSON.stringify(defaultSports));
 }
 
 function saveSports() {
@@ -157,6 +171,7 @@ function defaultRosterForSport() {
 }
 
 function updateSportTabs() {
+  if (!sportTabs) return;
   sportTabs.querySelectorAll(".sport-tab").forEach((button) => {
     const isActive = button.dataset.sport === activeSport;
     button.classList.toggle("active", isActive);
@@ -165,6 +180,7 @@ function updateSportTabs() {
 }
 
 function renderSportTabs() {
+  if (!sportTabs) return;
   sportTabs.innerHTML = "";
   sports.forEach((sport) => {
     const button = document.createElement("button");
@@ -178,6 +194,7 @@ function renderSportTabs() {
 }
 
 function renderSportEditor() {
+  if (!sportList) return;
   sportList.innerHTML = "";
 
   sports.forEach((sport) => {
@@ -222,14 +239,7 @@ function makeSportKey(label, existingKey = "", extraUsed = null) {
 }
 
 async function addSport(label) {
-  const cleanLabel = label.trim();
-  if (!cleanLabel) return;
-
-  const key = makeSportKey(cleanLabel);
-  sports.push({ key, label: cleanLabel });
-  sportName.value = "";
-  await saveSports();
-  await switchSport(key);
+  saveStatus.textContent = "Only the Volleyball roster is active now.";
 }
 
 async function renameSport(key, label) {
@@ -243,21 +253,7 @@ async function renameSport(key, label) {
 }
 
 async function deleteSport(key) {
-  if (sports.length <= 1) {
-    saveStatus.textContent = "Keep at least one sport tab.";
-    return;
-  }
-
-  const deleted = sports.find((sport) => sport.key === key);
-  sports = sports.filter((sport) => sport.key !== key);
-  await saveSports();
-
-  if (key === activeSport) {
-    await switchSport(sports[0].key);
-  } else {
-    updateSportTabs();
-    saveStatus.textContent = `${deleted?.label || "Sport"} removed from tabs.`;
-  }
+  saveStatus.textContent = "Only the Volleyball roster is active now.";
 }
 
 function pairKey(playerA, playerB) {
@@ -372,15 +368,19 @@ function loadRoster() {
   try {
     const saved = localStorage.getItem(sportStorageKey(STORAGE_KEY));
     hasSavedRoster = Boolean(saved);
-    return saved ? JSON.parse(saved).map(normalizePlayer) : defaultRosterForSport();
+    if (saved) return JSON.parse(saved).map(normalizePlayer);
+    const ratingBackup = loadPlayerRatingsFile();
+    return ratingBackup.length ? ratingBackup : defaultRosterForSport();
   } catch {
     hasSavedRoster = false;
-    return defaultRosterForSport();
+    const ratingBackup = loadPlayerRatingsFile();
+    return ratingBackup.length ? ratingBackup : defaultRosterForSport();
   }
 }
 
 function saveRoster() {
   localStorage.setItem(sportStorageKey(STORAGE_KEY), JSON.stringify(roster));
+  savePlayerRatingsFile();
   if (!API_ENABLED) return;
 
   return fetch(apiUrl("/api/players"), {
@@ -429,6 +429,7 @@ async function loadSharedState() {
 
 function saveLocalOnly() {
   localStorage.setItem(sportStorageKey(STORAGE_KEY), JSON.stringify(roster));
+  savePlayerRatingsFile();
 }
 
 function rosterMergeKey(person) {
@@ -467,7 +468,7 @@ function mergeRosters(sharedPlayers, savedPlayers) {
 }
 
 async function switchSport(sportKey) {
-  if (sportKey === activeSport || !sports.some((sport) => sport.key === sportKey)) return;
+  if (sportKey !== "volleyball" || sportKey === activeSport) return;
 
   activeSport = sportKey;
   localStorage.setItem(ACTIVE_SPORT_KEY, activeSport);
@@ -593,7 +594,7 @@ function averageSkill(person) {
 }
 
 function playersByRating(players) {
-  const genderOrder = { male: 0, female: 1, new: 2 };
+  const genderOrder = { male: 0, female: 1 };
   return players.slice().sort((a, b) => {
     const genderRank = (genderOrder[a.gender] ?? 3) - (genderOrder[b.gender] ?? 3);
     if (genderRank !== 0) return genderRank;
@@ -604,8 +605,7 @@ function playersByRating(players) {
 function genderLabel(gender) {
   if (gender === "female") return "Female";
   if (gender === "male") return "Male";
-  if (gender === "new") return "New";
-  return "Not set";
+  return "";
 }
 
 function genderCount(team, gender) {
@@ -616,9 +616,8 @@ function genderCount(team, gender) {
 function teamGenderSummary(team) {
   const females = genderCount(team, "female");
   const males = genderCount(team, "male");
-  const newPlayers = genderCount(team, "new");
-  if (!females && !males && !newPlayers) return "";
-  return `${females} female${females === 1 ? "" : "s"} / ${males} male${males === 1 ? "" : "s"} / ${newPlayers} new`;
+  if (!females && !males) return "";
+  return `${females} female${females === 1 ? "" : "s"} / ${males} male${males === 1 ? "" : "s"}`;
 }
 
 function shuffle(items) {
@@ -632,12 +631,11 @@ function balancedDraftOrder(players) {
   const groups = {
     female: [],
     male: [],
-    new: [],
     unset: []
   };
 
   players.forEach((person) => {
-    const groupKey = person.gender || "unset";
+    const groupKey = person.gender === "male" || person.gender === "female" ? person.gender : "unset";
     groups[groupKey].push(person);
   });
 
@@ -646,7 +644,7 @@ function balancedDraftOrder(players) {
   });
 
   const draftOrder = [];
-  const groupOrder = shuffle(["female", "male", "new", "unset"]);
+  const groupOrder = shuffle(["female", "male", "unset"]);
   while (groupOrder.some((groupKey) => groups[groupKey].length)) {
     groupOrder.forEach((groupKey) => {
       const nextPlayer = groups[groupKey].shift();
@@ -679,8 +677,30 @@ function buildSkillsForm() {
     input.addEventListener("input", () => {
       input.nextElementSibling.value = input.value;
       input.nextElementSibling.textContent = input.value;
+      queueRatingAutosave(input);
     });
   });
+}
+
+function queueRatingAutosave(input) {
+  const id = document.querySelector("#playerId").value;
+  if (!id) return;
+
+  const person = roster.find((item) => item.id === id);
+  if (!person) return;
+
+  person.ratings[input.dataset.skill] = Number(input.value);
+  person.savedAt = new Date().toISOString();
+  generatedTeams = [];
+  saveLocalOnly();
+  renderRoster();
+  renderTeams();
+  saveStatus.textContent = `${person.name} rating saved.`;
+
+  clearTimeout(ratingAutosaveTimer);
+  ratingAutosaveTimer = setTimeout(() => {
+    saveRoster();
+  }, 400);
 }
 
 function renderStats() {
@@ -724,8 +744,12 @@ function renderRoster() {
       attendancePill.textContent = isPlaying ? "Playing" : "Not playing";
       attendancePill.classList.add(isPlaying ? "attendance-playing-pill" : "attendance-away-pill");
       const genderPill = card.querySelector(".gender-pill");
-      genderPill.textContent = genderLabel(person.gender);
-      genderPill.classList.add(person.gender ? `gender-${person.gender}-pill` : "gender-unset-pill");
+      if (person.gender === "male" || person.gender === "female") {
+        genderPill.textContent = genderLabel(person.gender);
+        genderPill.classList.add(`gender-${person.gender}-pill`);
+      } else {
+        genderPill.hidden = true;
+      }
       card.querySelector(".skill-meter span").style.width = `${(score / 5) * 100}%`;
       card.querySelector(".player-meta").textContent = isAdmin ? person.notes || "" : "";
       const playingButton = card.querySelector(".attendance-playing");
@@ -749,7 +773,7 @@ function renderRoster() {
 function resetForm() {
   form.reset();
   document.querySelector("#playerId").value = "";
-  document.querySelector("#playerGender").value = "";
+  document.querySelector("#playerGender").value = "male";
   skills.forEach((skill) => {
     const input = document.querySelector(`#skill-${skill.key}`);
     input.value = 3;
@@ -790,7 +814,7 @@ function editPlayer(id) {
 
   document.querySelector("#playerId").value = person.id;
   document.querySelector("#playerName").value = person.name;
-  document.querySelector("#playerGender").value = person.gender || "";
+  document.querySelector("#playerGender").value = person.gender === "female" ? "female" : "male";
   document.querySelector("#playerNotes").value = person.notes || "";
 
   skills.forEach((skill) => {
@@ -968,16 +992,20 @@ document.querySelector("#copyTeams").addEventListener("click", async () => {
   await copyText(teamsText());
 });
 
-sportForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  addSport(sportName.value);
-});
+if (sportForm) {
+  sportForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    addSport(sportName.value);
+  });
+}
 
-sportTabs.addEventListener("click", (event) => {
-  const button = event.target.closest(".sport-tab");
-  if (!button) return;
-  switchSport(button.dataset.sport);
-});
+if (sportTabs) {
+  sportTabs.addEventListener("click", (event) => {
+    const button = event.target.closest(".sport-tab");
+    if (!button) return;
+    switchSport(button.dataset.sport);
+  });
+}
 
 document.querySelectorAll(".tab-button").forEach((button) => {
   button.addEventListener("click", () => {

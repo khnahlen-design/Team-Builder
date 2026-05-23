@@ -1,4 +1,4 @@
-const CACHE_NAME = "courtcrew-mobile-v35";
+const CACHE_NAME = "courtcrew-mobile-v37";
 const APP_SHELL = [
   "./",
   "./index.html",

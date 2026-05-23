@@ -788,16 +788,6 @@ a:focus-visible {
   background: rgba(79, 124, 172, 0.18);
 }
 
-.gender-new-pill {
-  color: #685100;
-  background: rgba(246, 200, 95, 0.24);
-}
-
-.gender-unset-pill {
-  color: #44504d;
-  background: rgba(100, 113, 110, 0.14);
-}
-
 .attendance-playing-pill {
   color: #0d5534;
   background: rgba(111, 207, 151, 0.24);

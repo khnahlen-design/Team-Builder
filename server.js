@@ -7,6 +7,8 @@ const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || "0.0.0.0";
 const ROOT = __dirname;
 const DB_FILE = path.join(ROOT, "courtcrew-db.json");
+const DB_BACKUP_FILE = path.join(ROOT, "courtcrew-db.backup.json");
+const PLAYER_RATINGS_FILE = path.join(ROOT, "courtcrew-player-ratings.json");
 
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -33,10 +35,7 @@ const defaultRatingTopics = [
   { key: "gameSense", label: "Game IQ" }
 ];
 const defaultSports = [
-  { key: "volleyball", label: "Volleyball" },
-  { key: "basketball", label: "Basketball" },
-  { key: "soccer", label: "Soccer" },
-  { key: "hockey", label: "Hockey" }
+  { key: "volleyball", label: "Volleyball" }
 ];
 
 function newId() {
@@ -132,29 +131,7 @@ function labelFromSportKey(key) {
 }
 
 function normalizeSportsList(sportsList, sportsMap = null) {
-  const source = Array.isArray(sportsList) && sportsList.length
-    ? sportsList
-    : sportsMap
-      ? Object.keys(sportsMap).map((key) => ({ key, label: labelFromSportKey(key) }))
-      : defaultSports;
-  const used = new Set();
-  const cleaned = [];
-
-  source.forEach((sport) => {
-    const label = String(sport.label || labelFromSportKey(sport.key)).trim();
-    let key = normalizeSportKey(sport.key || label);
-    let count = 2;
-    const base = key;
-    while (used.has(key)) {
-      key = `${base}-${count}`;
-      count += 1;
-    }
-    if (!label) return;
-    used.add(key);
-    cleaned.push({ key, label });
-  });
-
-  return cleaned.length ? cleaned : defaultSports;
+  return defaultSports;
 }
 
 function emptySportState() {
@@ -207,6 +184,10 @@ function readDb() {
 
 function writeDb(db) {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  fs.writeFileSync(DB_BACKUP_FILE, JSON.stringify({
+    backedUpAt: new Date().toISOString(),
+    ...db
+  }, null, 2));
 }
 
 function sendJson(res, status, payload) {
@@ -242,7 +223,7 @@ function normalizePlayer(player) {
     id: player.id || newId(),
     name: String(player.name || "").trim(),
     notes: player.notes || "",
-    gender: gender === "male" || gender === "female" || gender === "new" ? gender : "",
+    gender: gender === "male" || gender === "female" ? gender : "",
     attendance: player.attendance === "away" ? "away" : "playing",
     savedAt: player.savedAt || new Date().toISOString(),
     ratings: Object.fromEntries(
@@ -251,12 +232,65 @@ function normalizePlayer(player) {
   };
 }
 
+function playerRatingRecord(player) {
+  return {
+    id: player.id,
+    name: player.name,
+    notes: player.notes || "",
+    gender: player.gender || "",
+    attendance: player.attendance || "playing",
+    savedAt: player.savedAt || new Date().toISOString(),
+    ratings: { ...player.ratings }
+  };
+}
+
+function readPlayerRatingsFile() {
+  if (!fs.existsSync(PLAYER_RATINGS_FILE)) return [];
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(PLAYER_RATINGS_FILE, "utf8"));
+    return (parsed.players || []).map(normalizePlayer);
+  } catch {
+    return [];
+  }
+}
+
+function writePlayerRatingsFile(players) {
+  fs.writeFileSync(PLAYER_RATINGS_FILE, JSON.stringify({
+    updatedAt: new Date().toISOString(),
+    players: players.map(playerRatingRecord)
+  }, null, 2));
+}
+
+function mergePlayerRatingsFile(players) {
+  const savedRatings = readPlayerRatingsFile();
+  if (!players.length) return savedRatings;
+
+  const byId = new Map(savedRatings.map((player) => [player.id, player]));
+  const byName = new Map(savedRatings.map((player) => [player.name.trim().toLowerCase(), player]));
+
+  return players.map((player) => {
+    const saved = byId.get(player.id) || byName.get(player.name.trim().toLowerCase());
+    if (!saved) return player;
+    return normalizePlayer({
+      ...player,
+      ...saved,
+      ratings: { ...player.ratings, ...saved.ratings },
+      notes: saved.notes || player.notes,
+      gender: saved.gender || player.gender,
+      attendance: saved.attendance || player.attendance,
+      savedAt: saved.savedAt || player.savedAt
+    });
+  });
+}
+
 async function handleApi(req, res, url) {
   const db = readDb();
   const sport = normalizeSportKey(url.searchParams.get("sport"));
   const sportState = getSportState(db, sport);
 
   if (req.method === "GET" && url.pathname === "/api/state") {
+    sportState.players = mergePlayerRatingsFile(sportState.players);
     sendJson(res, 200, { ...sportState, sport, sportsList: db.sportsList });
     return;
   }
@@ -276,6 +310,7 @@ async function handleApi(req, res, url) {
   if (req.method === "PUT" && url.pathname === "/api/players") {
     const body = await parseBody(req);
     sportState.players = (body.players || []).map(normalizePlayer);
+    writePlayerRatingsFile(sportState.players);
     syncLegacyVolleyball(db);
     writeDb(db);
     sendJson(res, 200, sportState.players);

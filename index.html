@@ -13,7 +13,7 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.svg">
-    <link rel="stylesheet" href="styles.css?v=35">
+    <link rel="stylesheet" href="styles.css?v=37">
   </head>
   <body>
     <main class="app-shell">
@@ -62,25 +62,6 @@
             <div class="topic-list" id="ratingTopicList"></div>
           </div>
         </details>
-
-        <details class="admin-panel rating-topics-dropdown">
-          <summary>
-            <span>
-              <span class="eyebrow">Sports</span>
-              <strong id="sports-heading">Sports tabs</strong>
-            </span>
-          </summary>
-          <div class="topic-dropdown-content">
-            <form class="topic-form" id="sportForm">
-              <label for="sportName">New sport</label>
-              <div class="password-row">
-                <input id="sportName" type="text" placeholder="Baseball, dodgeball...">
-                <button class="primary-button" type="submit">Add</button>
-              </div>
-            </form>
-            <div class="topic-list" id="sportList"></div>
-          </div>
-        </details>
       </aside>
 
       <section class="workbench">
@@ -105,8 +86,6 @@
           </div>
         </header>
 
-        <nav class="sport-tabs" id="sportTabs" aria-label="Sports"></nav>
-
         <nav class="tabs" aria-label="App sections">
           <button class="tab-button active" type="button" data-tab="players">Roster</button>
           <button class="tab-button" type="button" data-tab="teams">Teams</button>
@@ -130,10 +109,8 @@
                 <label>
                   Gender
                   <select id="playerGender">
-                    <option value="">Not set</option>
-                    <option value="female">Female</option>
                     <option value="male">Male</option>
-                    <option value="new">New</option>
+                    <option value="female">Female</option>
                   </select>
                 </label>
               </div>
@@ -221,7 +198,7 @@
       </article>
     </template>
 
-    <script src="app.js?v=35"></script>
+    <script src="app.js?v=37"></script>
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
